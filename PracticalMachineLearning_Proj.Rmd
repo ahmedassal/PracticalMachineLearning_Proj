@@ -6,15 +6,265 @@ output: html_document
 This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
+# Loading Packages
 ```{r}
-summary(cars)
+library(caret)
+library(ggplot2)
+library(dplyr)
+set.seed(123)
+```
+#Data Loading
+##Loading Training Data
+```{r Loading Training Data}
+
+trainingFile.url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+trainingDestfile=".//pml-training.csv"
+trainingFile=download.file(url=trainingFile.url, destfile=trainingDestfile)
+trainingData = read.csv(file=trainingDestfile)
+
 ```
 
+##Loading Testing Data
+```{r Loading Testing Data}
+testingFile.url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+testingDestfile=".//pml-testing.csv"
+testingFile=download.file(url=testingFile.url, destfile=testingDestfile)
+testingData = read.csv(file=testingDestfile)
+```
+
+#Data Processing
+##Data Splitting
+```{r Splitting}
+inTrain = createDataPartition(y=trainingData$classe, p=0.75, list= FALSE)
+training = trainingData[inTrain,]
+testing = trainingData[-inTrain,]
+
+nrow(training); nrow(testing)
+#summary(training); str(training)
+glimpse(training)
+dim(training)
+
+trainingStep = training
+trainingStepB = training
+```
+##Exploratory Data Analysis
+```{r}
+names(training)[1:7]
+training[,160]
+names(training[,159])
+featurePlot(x=training[,-160], y=training$classe, plot="pairs")
+```
+##Selecting relevant variables
+```{r}
+irrelevant_indices = 1:7
+relevant_indices = - irrelevant_indices
+
+# removing outcome variable
+#trainingSubset = training[,-160]
+trainingSubset = training
+trainingSubset = trainingSubset[,relevant_indices]
+trainingToNumeric = trainingSubset
+
+#trainingSubset2=as.numeric(trainingSubset)
+#trainingSubset2[,1]=as.numeric(trainingSubset[,1])
+instanceconvert <- colnames(trainingToNumeric)
+for (j in instanceconvert) {
+  print(j)
+  trainingToNumeric[,j]=as.numeric(trainingToNumeric[,j])
+}
+
+#toNumeric = sapply(trainingSubset, as.numeric)
+trainingStep = trainingToNumeric
+trainingStepB = trainingSubset
+```
+
+## Imputing missing values
+```{r}
+NAs1 = which(is.na(trainingStep))
+imputePreProc = preProcess(trainingStep, method="knnImpute")
+
+imputed = predict(imputePreProc, newdata=trainingStepB)
+NAs2 = which(is.na(imputed))
+all(NAs1 == NAs2)
+
+trainingStep = imputed
+trainingStepB = trainingStepB
+```
+
+##Creating Dummy Variables
+```{r}
+trn_dummies = dummyVars(classe ~., data = training, fullRank= TRUE)
+
+predict_dummies = predict(trn_dummies, newdata = training)
+dim(predict_dummies)
+
+```
+
+##Removing zero- and near-zero-variance variables
+```{r}
+nzv = nearZeroVar(trainingStep, saveMetrics = TRUE)
+nzv
+dim(trainingStep)
+trainingNZV = trainingStep[, !nzv$zeroVar & !nzv$nzv ]
+dim(trainingNZV)
+trainingStep = trainingNZV
+
+nzv2 = nearZeroVar(trainingStepB, saveMetrics = TRUE)
+nzv2
+dim(trainingStepB)
+trainingNZV2 = trainingStepB[, !nzv2$zeroVar & !nzv2$nzv ]
+dim(trainingNZV2)
+trainingStepB = trainingNZV2
+
+
+trainingStep = imputed
+trainingStepB = trainingStepB
+```
+## Removing highly correlated variables
+```{r}
+#descrCor <- cor(trainingStep, use="complete.obs")
+descrCor <- cor(trainingStep)
+highlyCorrIndices = findCorrelation(descrCor, cutoff = 0.75)
+trainingCor = trainingStep[,-highlyCorrIndices]
+#descrCor2 = cor(trainingCor, use="complete.obs")
+#summary(descrCor2)
+trainingStep = trainingCor
+
+instanceconvert2 <- colnames(trainingStepB)
+for (j in instanceconvert2) {
+  print(j)
+  trainingStepB[,j]=as.numeric(trainingStepB[,j])
+}
+descrCorB <- cor(trainingStepB, use="complete.obs")
+highlyCorrIndicesB = findCorrelation(descrCorB, cutoff = 0.75)
+trainingCorB = trainingStepB[,-highlyCorrIndicesB]
+trainingStepB = trainingCorB
+
+```
+## Removing linear combinations
+```{r}
+comboInfo = findLinearCombos(trainingStep)
+dim(comboInfo)
+
+```
+
+## Centering and scaling variables
+```{r}
+trainnigCenScaled= preProcess(trainingStep, method = c("center", "scale"))
+dim(trainingStep)
+
+```
+
+## Transforming variables
+```{r}
+preProc = preProcess(trainingStep, method=c("center", "scale","knnImpute","pca"), thresh = 0.75 )
+dim(trainingStep)
+
+```
+
+
+#Final training data
+```{r}
+trainingStep$classe = training$classe
+trainingSemifinal = trainingStep
+trainingSemifinalB = trainingStepB
+str(trainingSemifinal)
+
+```
+
+
+# Training
+```{r}
+ctrl = trainControl(method="repeatedcv", repeats = 3)
+#modelFit <- train(classe ~., data = trainingSemifinal, method="rpart", tuneLength = 15, trControl=ctrl)
+modelFit <- train(classe ~ .,method="rpart",data=trainingSemifinal)
+print(modelFit$finalModel)
+plot(modelFit$finalModel, uniform=TRUE, 
+      main="Classification Tree")
+text(modelFit$finalModel, use.n=TRUE, all=TRUE, cex=.8)
+predicted = predict(modelFit, newdata=testing)
+confusionMatrix(predicted, testing$classe)
+
+ctrlB = trainControl(method="repeatedcv", repeats = 3)
+#modelFitB <- train(classe ~., data = trainingSemifinalB, method="rpart", tuneLength = 15, trControl=ctrl)
+modelFitB <- train(classe ~ .,method="rpart",data=trainingSemifinalB)
+print(modelFitB$finalModel)
+plot(modelFitB$finalModel, uniform=TRUE, 
+      main="Classification Tree")
+text(modelFitB$finalModel, use.n=TRUE, all=TRUE, cex=.8)
+predictedB = predict(modelFitB, newdata=testing)
+confusionMatrix(predictedB, testing$classe)
+
+library(rattle)
+library(rpart)
+fancyRpartPlot(modelFit$finalModel)
+
+
+
+length(testing$classe);length(predicted)
+summary(predicted)
+
+
+trainingFinal = predict(preProc, newdata=trainingSemifinal)
+ctrl = trainControl(method="repeatedcv", repeats = 3)
+glmFit = train(training$classe ~., data = trainingFinal, method="glmnet", tuneLength = 15, trControl=ctrl)
+plot(glmFit)
+```
+# Predictions
+
+```{r}
+irrelevant_indices = 1:7
+relevant_indices = - irrelevant_indices
+# removing outcome variable
+testingSubset = testing[,-160]
+testingSubset = testingSubset[,relevant_indices]
+
+nzv_testing = nearZeroVar(testingSubset, saveMetrics = TRUE)
+nzv_testing
+dim(testingSubset)
+testingNZV = testingSubset[, !nzv_testing$zeroVar & !nzv_testing$nzv ]
+dim(testingNZV)
+descrCor_test <- cor(testingNZV, use="complete.obs")
+highlyCorrIndices_test = findCorrelation(descrCor_test, cutoff = 0.75)
+testingCor = testingNZV[,-highlyCorrIndices_test]
+
+testingpreProc = preProcess(testingCor, method=c("center", "scale","knnImpute","pca"), thresh = 0.75 )
+testingFinal = predict(testingpreProc, newdata=testingCor)
+#ctrl = trainControl(method="repeatedcv", repeats = 3)
+#glmFit = train(training$classe ~., data = testingFinal, method="glmnet", tuneLength = 15, trControl=ctrl)
+predictions = predict(glmFit, testingFinal)
+
+```
+
+```{r}
+predictorsIndices = grep("classe", colnames(training))
+M = abs(cor(-training[,-predictorsIndices]))
+diag(M)=0
+bestPredictorsIndices = which(M > 0.8, arr.ind = T)
+smallTraining = training[,bestPredictorsIndices]
+
+
+```
+
+```{r}
+PCAs = prcomp(smallTraining)
+PCAs$rotation
+length(PCAs)
+ctrl = trainControl(method="repeatedcv", repeats = 3)
+glmFit = train(classe ~., data = training, method="glm", tuneLength = 15, trControl=ctrl)
+glmFit2 = train(classe ~., data = training, method="glm", preProcess = c("center", "scale"))
+glmFit3 = train(classe ~., data = PCAs, method="glm")
+glmFit4 = train(classe ~., data = training, method="glm", preProcess="pca")
+
+nsv = nearZeroVar(training, saveMetrics = TRUE)
+adjTraining = training[,nsv$zeroVar == FALSE & nsv$nzv == FALSE]
+
+glmFit5 = train(classe ~., data = adjTraining, method="glm", preProcess=c("center", "scale","pca"))
+glmFit6 = train(classe ~., data = adjTraining, method="glm", preProcess=c("pca"))
+```
 You can also embed plots, for example:
 
 ```{r, echo=FALSE}
 plot(cars)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
