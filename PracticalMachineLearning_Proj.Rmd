@@ -11,7 +11,11 @@ When you click the **Knit** button a document will be generated that includes bo
 library(caret)
 library(ggplot2)
 library(dplyr)
-set.seed(123)
+library(rattle)
+library(rpart)
+library(rpart.plot)
+
+set.seed(1235)
 ```
 #Data Loading
 ##Loading Training Data
@@ -19,7 +23,7 @@ set.seed(123)
 
 trainingFile.url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
 trainingDestfile=".//pml-training.csv"
-trainingFile=download.file(url=trainingFile.url, destfile=trainingDestfile)
+#trainingFile=download.file(url=trainingFile.url, destfile=trainingDestfile)
 trainingData = read.csv(file=trainingDestfile)
 
 ```
@@ -28,7 +32,7 @@ trainingData = read.csv(file=trainingDestfile)
 ```{r Loading Testing Data}
 testingFile.url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
 testingDestfile=".//pml-testing.csv"
-testingFile=download.file(url=testingFile.url, destfile=testingDestfile)
+#testingFile=download.file(url=testingFile.url, destfile=testingDestfile)
 testingData = read.csv(file=testingDestfile)
 ```
 
@@ -195,8 +199,7 @@ text(modelFitB$finalModel, use.n=TRUE, all=TRUE, cex=.8)
 predictedB = predict(modelFitB, newdata=testing)
 confusionMatrix(predictedB, testing$classe)
 
-library(rattle)
-library(rpart)
+
 fancyRpartPlot(modelFit$finalModel)
 
 

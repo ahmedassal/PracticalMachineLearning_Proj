@@ -3,8 +3,11 @@
 library(caret)
 library(ggplot2)
 library(dplyr)
+library(rattle)
+library(rpart)
 library(rpart.plot)
-set.seed(123)
+
+set.seed(1235)
 
 #Load
 trainingDestfile=".//pml-training.csv"
